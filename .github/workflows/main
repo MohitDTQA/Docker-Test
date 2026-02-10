@@ -1,36 +1,132 @@
-# This is a basic workflow to help you get started with Actions
-
-name: CI
-
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "main" branch
   push:
-    branches: [ "main" ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ main, master ]
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
+  test-and-deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v4
+      # 1️⃣ Checkout repository
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      # 2️⃣ Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      # 3️⃣ Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # 4️⃣ Install Playwright browsers
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      # 5️⃣ Install Allure CLI
+      - name: Install Allure CLI
+        run: npm install -D allure-commandline
+
+      # 6️⃣ Run Playwright tests
+      - name: Run Playwright tests
+        run: xvfb-run -a npx playwright test
+        continue-on-error: true
+
+      # 7️⃣ Generate Allure HTML report
+      - name: Generate Allure report
+        if: always()
+        run: npx allure-commandline generate results_reports/allure-results --clean -o results_reports/allure-report
+
+      # 8️⃣ Upload Playwright test-results artifacts
+      - name: Upload Playwright test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: results_reports/test-results/
+          retention-days: 30
+
+      # 8️⃣b Upload custom artifacts (screenshots/videos)
+      - name: Upload custom artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: custom-artifacts
+          path: artifacts/
+          retention-days: 30
+
+      # 9️⃣ Upload Playwright HTML report
+      - name: Upload Playwright report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: results_reports/playwright-report/
+          retention-days: 30
+
+      # 🔟 Upload Allure report
+      - name: Upload Allure report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: results_reports/allure-report/
+          retention-days: 30
+
+      # 1️⃣1️⃣ Prepare GitHub Pages content (Reports + Artifacts)
+      - name: Prepare Pages content
+        if: always()
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          mkdir -p pages/playwright
+          mkdir -p pages/allure
+          mkdir -p pages/artifacts
+
+          # Copy reports
+          cp -r results_reports/playwright-report/* pages/playwright/
+          cp -r results_reports/allure-report/* pages/allure/
+
+          # Copy artifacts from root/artifacts/ directory
+          if [ -d "artifacts" ]; then
+            cp -r artifacts/* pages/artifacts/
+          fi
+
+          # Copy test-results if exists
+          if [ -d "results_reports/test-results" ]; then
+            cp -r results_reports/test-results/* pages/artifacts/
+          fi
+
+          # Copy HTML templates and scripts from .github/workflows/html-templates
+          cp .github/workflows/html-templates/artifacts-index.html pages/artifacts/index.html
+          cp .github/workflows/html-templates/generate-artifacts-list.sh pages/artifacts/generate-list.sh
+          cp .github/workflows/html-templates/landing-page.html pages/index.html
+
+          # Generate artifacts list JSON
+          chmod +x pages/artifacts/generate-list.sh
+          cd pages/artifacts && ./generate-list.sh > artifacts-list.json && cd ../..
+
+      # 1️⃣2️⃣ Upload Pages artifact (ONLY ONCE)
+      - name: Upload Pages artifact
+        if: always()
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages/
+
+      # 1️⃣3️⃣ Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
+        if: always()
+        id: deployment
+        uses: actions/deploy-pages@v4
