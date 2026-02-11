@@ -1,0 +1,8 @@
+docker build -t playwright-tests .
+
+docker run --rm playwright-tests
+
+docker run --rm -v "%cd%":/app -w /app playwright-tests npx playwright test
+(Use this to avoid rebuilding each time.)
+
+docker compose logs -f

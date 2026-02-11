@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  playwright-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: playwright-tests
+    
+    # Shared memory size (important for Chrome/Chromium)
+    shm_size: '2gb'
+    
+    # Environment variables from config.env
+    environment:
+      - OPEN_BROWSER=${OPEN_BROWSER:-false}
+      - SLOW_MOTION=${SLOW_MOTION:-200}
+      - BROWSER=${BROWSER:-chrome}
+      - PARALLEL_TESTS=${PARALLEL_TESTS:-1}
+      - RECORD_VIDEO=${RECORD_VIDEO:-on}
+      - SPLASH_DURATION=${SPLASH_DURATION:-2000}
+      - HIGHLIGHT_DURATION=${HIGHLIGHT_DURATION:-2}
+      - TIMEOUT=${TIMEOUT:-400000}
+      - ACTION_TIMEOUT=${ACTION_TIMEOUT:-40000}
+      - NAVIGATION_TIMEOUT=${NAVIGATION_TIMEOUT:-15000}
+      - DOWNLOAD_URL=${DOWNLOAD_URL:-}
+      - DATA_PATH=${DATA_PATH:-test-data/TestData.xlsx}
+      - TEST_DIRECTORY=${TEST_DIRECTORY:-Tests}
+      # Add credentials from creds.env
+      - USERNAME=${USERNAME}
+      - PASSWORD=${PASSWORD}
+      # Any other creds variables you have
+    
+    # Mount volumes to persist test results and access test data
+    volumes:
+      - ./results_reports:/app/results_reports
+      - ./test-data:/app/test-data
+      - ./screenshots:/app/screenshots
+      - ./videos:/app/videos
+      - ./traces:/app/traces
+    
+    # Memory and CPU limits (adjust as needed)
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          memory: 2G
+    
+    # Override command if needed
+    command: npx playwright test
