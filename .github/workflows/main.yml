@@ -39,12 +39,16 @@ jobs:
         run: docker compose run --rm playwright
         continue-on-error: true
 
-      - name: Install Allure CLI
-        run: npm install -D allure-commandline
-
       - name: Generate Allure report
         if: always()
-        run: npx allure-commandline generate results_reports/allure-results --clean -o results_reports/allure-report
+        run: |
+          docker compose run --rm playwright sh -lc '
+            if [ -d "results_reports/allure-results" ]; then
+              npx allure-commandline generate results_reports/allure-results --clean -o results_reports/allure-report
+            else
+              mkdir -p results_reports/allure-report
+            fi
+          '
 
       - name: Upload Playwright test-results
         if: always()
